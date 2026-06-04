@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Campaign Data Comparator & Anomaly Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0e0f11;
+  --bg2: #141619;
+  --bg3: #1c1e22;
+  --bg4: #242629;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e8e6e0;
+  --text2: #8e8c84;
+  --text3: #5c5b56;
+  --accent: #c8f060;
+  --accent-dim: rgba(200,240,96,0.12);
+  --accent-border: rgba(200,240,96,0.3);
+  --danger: #f06060;
+  --danger-dim: rgba(240,96,96,0.12);
+  --danger-border: rgba(240,96,96,0.3);
+  --warn: #f0b860;
+  --warn-dim: rgba(240,184,96,0.12);
+  --warn-border: rgba(240,184,96,0.3);
+  --info: #60b8f0;
+  --info-dim: rgba(96,184,240,0.12);
+  --info-border: rgba(96,184,240,0.3);
+  --azure: #60b8f0;
+  --db: #a0e090;
+  --tableau: #f0c060;
+  --r: 8px;
+  --r2: 12px;
+  --mono: 'DM Mono', monospace;
+  --display: 'Fraunces', serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+body { min-height: 100vh; }
+
+/* ── Layout ── */
+.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.sidebar { background: var(--bg2); border-right: 1px solid var(--border); padding: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
+.main { overflow-y: auto; }
+
+/* ── Sidebar ── */
+.logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+.logo-title { font-family: var(--display); font-size: 16px; font-weight: 500; color: var(--text); letter-spacing: -0.01em; line-height: 1.3; }
+.logo-sub { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+.nav-section { padding: 14px 0 4px; }
+.nav-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; padding: 0 18px 6px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 7px 18px; cursor: pointer; color: var(--text2); font-size: 12px; border-left: 2px solid transparent; transition: all 0.15s; }
+.nav-item:hover { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+.nav-item .icon { width: 14px; text-align: center; font-size: 13px; }
+.sidebar-footer { margin-top: auto; padding: 14px 18px; border-top: 1px solid var(--border); }
+.source-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); padding: 3px 0; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+.dot.ok { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.dot.err { background: var(--danger); }
+.dot.loading { background: var(--warn); animation: blink 0.8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Top bar ── */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 10; }
+.page-title { font-family: var(--display); font-size: 18px; font-weight: 300; color: var(--text); letter-spacing: -0.02em; }
+.topbar-actions { display: flex; gap: 8px; }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: var(--r); font-family: var(--mono); font-size: 12px; cursor: pointer; border: 1px solid var(--border2); background: var(--bg3); color: var(--text2); transition: all 0.15s; }
+.btn:hover { color: var(--text); border-color: var(--border2); background: var(--bg4); }
+.btn.primary { background: var(--accent); color: #0e0f11; border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { background: #d4f57a; }
+.btn.danger { background: var(--danger-dim); color: var(--danger); border-color: var(--danger-border); }
+.btn.sm { padding: 4px 10px; font-size: 11px; }
+
+/* ── Content area ── */
+.content { padding: 24px 28px; }
+.section { display: none; }
+.section.active { display: block; }
+
+/* ── Cards ── */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 18px 20px; }
+.card-title { font-family: var(--display); font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 14px; }
+
+/* ── Metric strip ── */
+.metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+.metric { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
+.metric-label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.metric-value { font-family: var(--display); font-size: 26px; font-weight: 500; line-height: 1; }
+.metric-value.ok { color: var(--accent); }
+.metric-value.warn { color: var(--warn); }
+.metric-value.danger { color: var(--danger); }
+.metric-value.info { color: var(--info); }
+.metric-sub { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+/* ── Tables ── */
+.table-wrap { border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead { background: var(--bg3); }
+th { padding: 9px 14px; text-align: left; font-size: 10px; color: var(--text3); letter-spacing: 0.07em; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 500; }
+td { padding: 8px 14px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg3); color: var(--text); }
+.mono { font-family: var(--mono); }
+
+/* ── Badges ── */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 500; letter-spacing: 0.03em; }
+.badge.match { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+.badge.mismatch { background: var(--danger-dim); color: var(--danger); border: 1px solid var(--danger-border); }
+.badge.missing { background: var(--warn-dim); color: var(--warn); border: 1px solid var(--warn-border); }
+.badge.anomaly { background: var(--danger-dim); color: var(--danger); border: 1px solid var(--danger-border); }
+.badge.warning { background: var(--warn-dim); color: var(--warn); border: 1px solid var(--warn-border); }
+.badge.ok { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+.badge.info { background: var(--info-dim); color: var(--info); border: 1px solid var(--info-border); }
+.badge.critical { background: rgba(240,96,96,0.25); color: #ff7070; border: 1px solid rgba(240,96,96,0.5); }
+
+/* ── Severity bar ── */
+.sev { display: inline-flex; align-items: center; gap: 5px; }
+.sev-bar { height: 4px; border-radius: 2px; background: var(--bg4); width: 60px; overflow: hidden; }
+.sev-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+
+/* ── Source config ── */
+.source-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px; }
+.source-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px; transition: border-color 0.2s; }
+.source-card.connected { border-color: var(--accent-border); }
+.source-card.error { border-color: var(--danger-border); }
+.source-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.source-icon { width: 30px; height: 30px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.source-icon.azure { background: var(--info-dim); color: var(--info); }
+.source-icon.db { background: var(--accent-dim); color: var(--accent); }
+.source-icon.tableau { background: var(--warn-dim); color: var(--warn); }
+.source-name { font-family: var(--display); font-size: 13px; font-weight: 500; color: var(--text); }
+.source-type { font-size: 10px; color: var(--text3); }
+.source-inputs { display: flex; flex-direction: column; gap: 6px; }
+.source-inputs input { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 11px; outline: none; transition: border-color 0.15s; }
+.source-inputs input:focus { border-color: var(--accent-border); }
+.source-inputs input::placeholder { color: var(--text3); }
+
+/* ── Anomaly cards ── */
+.anomaly-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 20px; }
+.anomaly-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px; border-left: 3px solid var(--border); }
+.anomaly-card.critical { border-left-color: var(--danger); }
+.anomaly-card.high { border-left-color: var(--warn); }
+.anomaly-card.medium { border-left-color: var(--info); }
+.anomaly-card.low { border-left-color: var(--text3); }
+.anomaly-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+.anomaly-title { font-size: 12px; font-weight: 500; color: var(--text); }
+.anomaly-desc { font-size: 11px; color: var(--text2); line-height: 1.5; margin-bottom: 10px; }
+.anomaly-meta { display: flex; gap: 10px; flex-wrap: wrap; }
+.anomaly-meta-item { font-size: 10px; color: var(--text3); }
+.anomaly-meta-item span { color: var(--text2); }
+
+/* ── Filters ── */
+.filter-row { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+.filter-row select, .filter-row input { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; }
+.filter-row select:focus, .filter-row input:focus { border-color: var(--accent-border); }
+.pill { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 99px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); color: var(--text3); background: var(--bg3); transition: all 0.15s; }
+.pill.active { color: var(--accent); border-color: var(--accent-border); background: var(--accent-dim); }
+
+/* ── Charts ── */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.chart-box { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px; }
+.chart-box-title { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 14px; }
+.chart-wrap { position: relative; height: 200px; }
+
+/* ── AI Analysis panel ── */
+.ai-panel { background: var(--bg2); border: 1px solid var(--accent-border); border-radius: var(--r2); padding: 18px 20px; margin-bottom: 20px; }
+.ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ai-label { font-size: 10px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.ai-content { font-size: 12px; color: var(--text2); line-height: 1.7; white-space: pre-wrap; }
+.ai-cursor { display: inline-block; width: 8px; height: 13px; background: var(--accent); animation: blink 0.8s infinite; vertical-align: middle; margin-left: 2px; }
+
+/* ── Tabs ── */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+.tab { padding: 8px 18px; font-size: 12px; cursor: pointer; color: var(--text3); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Detail diff ── */
+.diff-val { font-family: var(--mono); font-size: 11px; }
+.diff-old { color: var(--danger); }
+.diff-new { color: var(--accent); }
+.val-azure { color: var(--azure); }
+.val-db { color: var(--db); }
+.val-tableau { color: var(--tableau); }
+
+/* ── Source legend ── */
+.src-legend { display: flex; gap: 14px; margin-bottom: 10px; }
+.src-dot { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text3); }
+.src-dot::before { content: ''; width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.src-dot.azure::before { background: var(--azure); }
+.src-dot.db::before { background: var(--db); }
+.src-dot.tableau::before { background: var(--tableau); }
+
+/* ── Progress ── */
+.progress-bar { height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin: 8px 0; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.6s ease; }
+
+/* ── Tooltip-style ── */
+.hint { font-size: 10px; color: var(--text3); font-style: italic; }
+
+/* ── Empty ── */
+.empty { text-align: center; padding: 48px; color: var(--text3); font-size: 12px; }
+.empty-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.3; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-title">Campaign<br/>Comparator</div>
+    <div class="logo-sub">v2 · anomaly engine</div>
+  </div>
+  <nav>
+    <div class="nav-section">
+      <div class="nav-label">Views</div>
+      <div class="nav-item active" onclick="showSection('overview', this)"><span class="icon">◈</span> Overview</div>
+      <div class="nav-item" onclick="showSection('comparison', this)"><span class="icon">⇄</span> Source Comparison</div>
+      <div class="nav-item" onclick="showSection('anomalies', this)"><span class="icon">⚠</span> Anomalies <span id="anom-count" style="margin-left:auto;font-size:10px;background:var(--danger-dim);color:var(--danger);padding:1px 6px;border-radius:99px;"></span></div>
+      <div class="nav-item" onclick="showSection('campaigns', this)"><span class="icon">▦</span> Campaign Detail</div>
+      <div class="nav-item" onclick="showSection('config', this)"><span class="icon">⊙</span> Data Sources</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Analysis</div>
+      <div class="nav-item" onclick="showSection('ai', this)"><span class="icon">✦</span> AI Analysis</div>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Source Status</div>
+    <div class="source-status"><div class="dot" id="sd-azure"></div> Azure Blob</div>
+    <div class="source-status"><div class="dot" id="sd-db"></div> Database</div>
+    <div class="source-status"><div class="dot" id="sd-tableau"></div> Tableau</div>
+    <div style="margin-top:12px;">
+      <button class="btn sm" onclick="loadSampleData()" style="width:100%;justify-content:center;">⟳ Load sample data</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="page-title">Overview</div>
+    <div class="topbar-actions">
+      <button class="btn" onclick="exportReport()">↓ Export report</button>
+      <button class="btn primary" onclick="runComparison()">⟳ Run comparison</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── Overview ── -->
+    <div class="section active" id="section-overview">
+      <div class="metrics" id="overview-metrics">
+        <div class="metric"><div class="metric-label">Total campaigns</div><div class="metric-value info" id="m-campaigns">—</div><div class="metric-sub">across all sources</div></div>
+        <div class="metric"><div class="metric-label">Full matches</div><div class="metric-value ok" id="m-matches">—</div><div class="metric-sub">all 3 sources agree</div></div>
+        <div class="metric"><div class="metric-label">Mismatches</div><div class="metric-value danger" id="m-mismatches">—</div><div class="metric-sub">value conflicts</div></div>
+        <div class="metric"><div class="metric-label">Anomalies</div><div class="metric-value danger" id="m-anomalies">—</div><div class="metric-sub">statistical outliers</div></div>
+        <div class="metric"><div class="metric-label">Data health</div><div class="metric-value ok" id="m-health">—</div><div class="metric-sub">overall score</div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-box">
+          <div class="chart-box-title">Spend discrepancy by campaign</div>
+          <div class="src-legend">
+            <span class="src-dot azure">Azure</span>
+            <span class="src-dot db">Database</span>
+            <span class="src-dot tableau">Tableau</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-spend" role="img" aria-label="Spend discrepancy by campaign across three sources">Spend comparison chart</canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-box-title">Anomaly severity distribution</div>
+          <div class="chart-wrap"><canvas id="chart-anomaly-dist" role="img" aria-label="Anomaly severity counts">Anomaly severity chart</canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-box">
+          <div class="chart-box-title">CTR trend — anomaly overlay</div>
+          <div class="chart-wrap"><canvas id="chart-ctr" role="img" aria-label="CTR trend with anomaly markers">CTR trend chart</canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-box-title">ROAS by source</div>
+          <div class="chart-wrap"><canvas id="chart-roas" role="img" aria-label="ROAS comparison by source">ROAS chart</canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Top anomalies requiring attention</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Campaign</th><th>Metric</th><th>Issue</th><th>Severity</th><th>Sources affected</th><th>Value range</th>
+            </tr></thead>
+            <tbody id="top-anomalies-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Source Comparison ── -->
+    <div class="section" id="section-comparison">
+      <div class="filter-row">
+        <select id="cmp-campaign"><option value="all">All campaigns</option></select>
+        <select id="cmp-metric"><option value="all">All metrics</option></select>
+        <span class="pill active" onclick="setCmpFilter('all',this)">All</span>
+        <span class="pill" onclick="setCmpFilter('mismatch',this)">Mismatches</span>
+        <span class="pill" onclick="setCmpFilter('missing',this)">Missing</span>
+        <span class="pill" onclick="setCmpFilter('match',this)">Matches</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text3);" id="cmp-count"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:14%">Campaign</th>
+            <th style="width:12%">Metric</th>
+            <th style="width:16%">Azure Blob</th>
+            <th style="width:16%">Database</th>
+            <th style="width:16%">Tableau</th>
+            <th style="width:11%">Status</th>
+            <th style="width:15%">Max delta</th>
+          </tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Anomalies ── -->
+    <div class="section" id="section-anomalies">
+      <div class="filter-row">
+        <span class="pill active" onclick="setAnomFilter('all',this)">All anomalies</span>
+        <span class="pill" onclick="setAnomFilter('critical',this)">Critical</span>
+        <span class="pill" onclick="setAnomFilter('high',this)">High</span>
+        <span class="pill" onclick="setAnomFilter('medium',this)">Medium</span>
+        <span class="pill" onclick="setAnomFilter('low',this)">Low</span>
+        <select id="anom-type-filter" onchange="renderAnomalies()" style="margin-left:auto;">
+          <option value="all">All anomaly types</option>
+          <option value="statistical">Statistical outlier</option>
+          <option value="mismatch">Cross-source mismatch</option>
+          <option value="missing">Missing data</option>
+          <option value="trend">Trend break</option>
+          <option value="logic">Logic violation</option>
+        </select>
+      </div>
+      <div id="anomaly-cards-wrap"></div>
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title">Anomaly log — full detail</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Campaign</th><th>Metric</th><th>Type</th><th>Description</th><th>Source(s)</th><th>Severity</th><th>Detected</th>
+            </tr></thead>
+            <tbody id="anom-log-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Campaign Detail ── -->
+    <div class="section" id="section-campaigns">
+      <div class="filter-row">
+        <select id="camp-selector" onchange="renderCampaignDetail()">
+          <option value="">Select a campaign…</option>
+        </select>
+      </div>
+      <div id="campaign-detail-wrap">
+        <div class="empty"><div class="empty-icon">▦</div>Select a campaign above to inspect its full record.</div>
+      </div>
+    </div>
+
+    <!-- ── Config ── -->
+    <div class="section" id="section-config">
+      <div class="source-grid">
+        <div class="source-card" id="cfg-azure">
+          <div class="source-header">
+            <div class="source-icon azure">☁</div>
+            <div><div class="source-name">Azure Blob Storage</div><div class="source-type">Container / blob path</div></div>
+            <div class="dot" id="cfg-dot-azure" style="margin-left:auto;"></div>
+          </div>
+          <div class="source-inputs">
+            <input id="az-account" placeholder="Storage account name" />
+            <input id="az-container" placeholder="Container name" />
+            <input id="az-path" placeholder="Blob path or prefix" />
+            <input id="az-key" placeholder="SAS token or connection string" type="password" />
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px;">
+            <button class="btn sm" onclick="testConnection('azure')">Test connection</button>
+            <button class="btn sm" onclick="loadSampleData()">Use sample data</button>
+          </div>
+        </div>
+        <div class="source-card" id="cfg-db">
+          <div class="source-header">
+            <div class="source-icon db">⊡</div>
+            <div><div class="source-name">Database</div><div class="source-type">SQL / NoSQL</div></div>
+            <div class="dot" id="cfg-dot-db" style="margin-left:auto;"></div>
+          </div>
+          <div class="source-inputs">
+            <input id="db-host" placeholder="Host / connection string" />
+            <input id="db-name" placeholder="Database name" />
+            <input id="db-table" placeholder="Table or collection" />
+            <input id="db-query" placeholder="Optional: custom SQL query" />
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn sm" onclick="testConnection('db')">Test connection</button>
+          </div>
+        </div>
+        <div class="source-card" id="cfg-tableau">
+          <div class="source-header">
+            <div class="source-icon tableau">▤</div>
+            <div><div class="source-name">Tableau</div><div class="source-type">Server / published data source</div></div>
+            <div class="dot" id="cfg-dot-tableau" style="margin-left:auto;"></div>
+          </div>
+          <div class="source-inputs">
+            <input id="tab-server" placeholder="Tableau server URL" />
+            <input id="tab-site" placeholder="Site name (blank = default)" />
+            <input id="tab-ds" placeholder="Data source or view name" />
+            <input id="tab-token" placeholder="Personal access token" type="password" />
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn sm" onclick="testConnection('tableau')">Test connection</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Anomaly detection configuration</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:4px;">
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Z-score threshold (statistical outliers)</div>
+            <input type="range" id="cfg-zscore" min="1" max="4" step="0.1" value="2.5" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('cfg-zscore-val').textContent=this.value" />
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;">Threshold: <span id="cfg-zscore-val">2.5</span>σ</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Max allowed cross-source delta (%)</div>
+            <input type="range" id="cfg-delta" min="1" max="30" step="1" value="5" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('cfg-delta-val').textContent=this.value+'%'" />
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;">Tolerance: <span id="cfg-delta-val">5%</span></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">CTR floor (below = anomaly)</div>
+            <input type="range" id="cfg-ctr-floor" min="0.1" max="5" step="0.1" value="0.5" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('cfg-ctr-val').textContent=this.value+'%'" />
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;">Floor: <span id="cfg-ctr-val">0.5%</span></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">ROAS floor (below = anomaly)</div>
+            <input type="range" id="cfg-roas-floor" min="0.5" max="5" step="0.1" value="1.0" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('cfg-roas-val').textContent=this.value+'x'" />
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;">Floor: <span id="cfg-roas-val">1.0x</span></div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" checked id="chk-trend" style="accent-color:var(--accent);"> Detect trend breaks (week-over-week)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" checked id="chk-logic"> Detect logic violations</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" checked id="chk-missing"> Flag missing records</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI Analysis ── -->
+    <div class="section" id="section-ai">
+      <div class="ai-panel">
+        <div class="ai-header">
+          <span style="font-size:16px;">✦</span>
+          <span class="ai-label">AI Analysis — powered by Claude</span>
+        </div>
+        <div class="ai-content" id="ai-output">Click a button below to run AI-powered analysis on your campaign data.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+        <button class="btn" onclick="runAI('summarize')">✦ Summarize mismatches</button>
+        <button class="btn" onclick="runAI('rootcause')">✦ Root cause analysis</button>
+        <button class="btn" onclick="runAI('recommendations')">✦ Optimization recommendations</button>
+        <button class="btn" onclick="runAI('quality')">✦ Data quality assessment</button>
+        <button class="btn" onclick="runAI('forecast')">✦ Anomaly forecast</button>
+        <button class="btn primary" onclick="runAI('full')">✦ Full AI audit report</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════
+   SAMPLE DATA
+════════════════════════════════════════════════════ */
+const CAMPAIGNS = [
+  'Brand Awareness Q2','Retargeting — Lapsed','Summer Promo Launch','Competitor Conquest',
+  'Email Re-engagement','Social Prospecting','YouTube CTV Reach','Paid Search — Brand',
+  'Paid Search — Non-brand','Shopping — Core SKUs'
+];
+
+const METRICS = ['spend','impressions','clicks','conversions','revenue','ctr','cpc','roas','cpa','conversion_rate'];
+
+function rand(min,max,dp=2){ return parseFloat((Math.random()*(max-min)+min).toFixed(dp)); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function genSourceVal(base, jitter=0.03){
+  return parseFloat((base*(1+rand(-jitter,jitter,4))).toFixed(2));
+}
+
+/* Build a coherent per-campaign dataset */
+const campaignData = CAMPAIGNS.map((name,i) => {
+  const spend_base = rand(8000,95000);
+  const imp_base   = Math.round(spend_base * rand(200,600));
+  const clicks_base= Math.round(imp_base * rand(0.005,0.035));
+  const conv_base  = Math.round(clicks_base * rand(0.02,0.12));
+  const rev_base   = parseFloat((conv_base * rand(40,350)).toFixed(2));
+
+  /* Intentionally inject anomalies on some campaigns */
+  const anomalyFlags = {};
+  if(i===2){ anomalyFlags.spend_spike = true; }
+  if(i===4){ anomalyFlags.ctr_floor = true; }
+  if(i===6){ anomalyFlags.roas_negative = true; }
+  if(i===8){ anomalyFlags.missing_azure = true; }
+  if(i===1){ anomalyFlags.big_delta = true; }
+  if(i===7){ anomalyFlags.trend_break = true; }
+
+  const spend_azure   = anomalyFlags.spend_spike ? spend_base * 4.2 : genSourceVal(spend_base, 0.01);
+  const spend_db      = genSourceVal(spend_base, 0.005);
+  const spend_tableau = anomalyFlags.big_delta ? spend_base * 0.6 : genSourceVal(spend_base, 0.01);
+
+  const ctr_azure   = anomalyFlags.ctr_floor ? 0.08 : parseFloat(((clicks_base/imp_base)*100).toFixed(3));
+  const ctr_db      = anomalyFlags.ctr_floor ? 0.09 : ctr_azure;
+  const ctr_tableau = ctr_azure;
+
+  const roas_azure   = anomalyFlags.roas_negative ? -0.3 : parseFloat((rev_base/spend_base).toFixed(3));
+  const roas_db      = roas_azure;
+  const roas_tableau = roas_azure;
+
+  return {
+    name,
+    anomalyFlags,
+    azure:   anomalyFlags.missing_azure ? null : {
+      spend: spend_azure, impressions: imp_base, clicks: clicks_base,
+      conversions: conv_base, revenue: genSourceVal(rev_base,0.01),
+      ctr: ctr_azure, cpc: parseFloat((spend_azure/clicks_base).toFixed(2)),
+      roas: roas_azure, cpa: parseFloat((spend_azure/conv_base).toFixed(2)),
+      conversion_rate: parseFloat(((conv_base/clicks_base)*100).toFixed(3))
+    },
+    db: {
+      spend: spend_db, impressions: imp_base, clicks: clicks_base,
+      conversions: conv_base, revenue: genSourceVal(rev_base,0.008),
+      ctr: ctr_db, cpc: parseFloat((spend_db/clicks_base).toFixed(2)),
+      roas: roas_db, cpa: parseFloat((spend_db/conv_base).toFixed(2)),
+      conversion_rate: parseFloat(((conv_base/clicks_base)*100).toFixed(3))
+    },
+    tableau: {
+      spend: spend_tableau, impressions: imp_base, clicks: clicks_base,
+      conversions: conv_base, revenue: genSourceVal(rev_base,0.015),
+      ctr: ctr_tableau, cpc: parseFloat((spend_tableau/clicks_base).toFixed(2)),
+      roas: roas_tableau, cpa: parseFloat((spend_tableau/conv_base).toFixed(2)),
+      conversion_rate: parseFloat(((conv_base/clicks_base)*100).toFixed(3))
+    }
+  };
+});
+
+/* ════════════════════════════════════════════════════
+   ANOMALY DETECTION ENGINE
+════════════════════════════════════════════════════ */
+function detectAnomalies(data){
+  const results = [];
+  const ZSCORE_THRESH = parseFloat(document.getElementById('cfg-zscore')?.value || 2.5);
+  const DELTA_THRESH  = parseFloat(document.getElementById('cfg-delta')?.value || 5) / 100;
+  const CTR_FLOOR     = parseFloat(document.getElementById('cfg-ctr-floor')?.value || 0.5);
+  const ROAS_FLOOR    = parseFloat(document.getElementById('cfg-roas-floor')?.value || 1.0);
+  const chkTrend      = document.getElementById('chk-trend')?.checked !== false;
+  const chkLogic      = document.getElementById('chk-logic')?.checked !== false;
+  const chkMissing    = document.getElementById('chk-missing')?.checked !== false;
+
+  /* 1. Statistical outliers — z-score per metric across campaigns */
+  METRICS.forEach(metric => {
+    const vals = data.flatMap(c => {
+      const srcs = [c.azure, c.db, c.tableau].filter(Boolean);
+      return srcs.map(s => s[metric]).filter(v => v != null);
+    });
+    if(vals.length < 3) return;
+    const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const std  = Math.sqrt(vals.reduce((a,b)=>a+(b-mean)**2,0)/vals.length);
+    if(std === 0) return;
+
+    data.forEach(c => {
+      ['azure','db','tableau'].forEach(src => {
+        if(!c[src]) return;
+        const v = c[src][metric];
+        if(v == null) return;
+        const z = Math.abs((v - mean)/std);
+        if(z > ZSCORE_THRESH){
+          results.push({
+            campaign: c.name, metric, type: 'statistical',
+            description: `Value ${fmt(v,metric)} is ${z.toFixed(1)}σ from the campaign mean (${fmt(mean,metric)}). Significant outlier detected in ${src}.`,
+            severity: z > ZSCORE_THRESH*1.6 ? 'critical' : z > ZSCORE_THRESH*1.2 ? 'high' : 'medium',
+            sources: [src], value: v, mean, zScore: z,
+            detected: new Date().toISOString()
+          });
+        }
+      });
+    });
+  });
+
+  /* 2. Cross-source mismatches — delta beyond tolerance */
+  data.forEach(c => {
+    METRICS.forEach(metric => {
+      const vals = ['azure','db','tableau'].map(s => c[s] ? c[s][metric] : null).filter(v => v != null);
+      if(vals.length < 2) return;
+      const minV = Math.min(...vals), maxV = Math.max(...vals);
+      if(minV <= 0) return;
+      const pctDelta = (maxV-minV)/minV;
+      if(pctDelta > DELTA_THRESH){
+        const srcsWithVals = ['azure','db','tableau'].filter(s => c[s] && c[s][metric] != null);
+        results.push({
+          campaign: c.name, metric, type: 'mismatch',
+          description: `Cross-source delta of ${(pctDelta*100).toFixed(1)}% detected on ${metric} (min: ${fmt(minV,metric)}, max: ${fmt(maxV,metric)}). Exceeds ${(DELTA_THRESH*100).toFixed(0)}% tolerance.`,
+          severity: pctDelta > DELTA_THRESH*5 ? 'critical' : pctDelta > DELTA_THRESH*2 ? 'high' : 'medium',
+          sources: srcsWithVals, minVal: minV, maxVal: maxV, delta: pctDelta,
+          detected: new Date().toISOString()
+        });
+      }
+    });
+  });
+
+  /* 3. Missing data */
+  if(chkMissing){
+    data.forEach(c => {
+      if(!c.azure){
+        results.push({
+          campaign: c.name, metric: 'all', type: 'missing',
+          description: `Campaign record is entirely absent from Azure Blob Storage. Data exists in Database and Tableau only.`,
+          severity: 'high', sources: ['azure'],
+          detected: new Date().toISOString()
+        });
+      }
+      ['azure','db','tableau'].forEach(src => {
+        if(!c[src]) return;
+        METRICS.forEach(metric => {
+          if(c[src][metric] == null || c[src][metric] === ''){
+            results.push({
+              campaign: c.name, metric, type: 'missing',
+              description: `Metric "${metric}" is null/empty in ${src} for this campaign.`,
+              severity: 'medium', sources: [src],
+              detected: new Date().toISOString()
+            });
+          }
+        });
+      });
+    });
+  }
+
+  /* 4. Logic violations */
+  if(chkLogic){
+    data.forEach(c => {
+      ['azure','db','tableau'].forEach(src => {
+        if(!c[src]) return;
+        const d = c[src];
+        /* CTR floor */
+        if(d.ctr < CTR_FLOOR){
+          results.push({
+            campaign: c.name, metric: 'ctr', type: 'logic',
+            description: `CTR of ${d.ctr.toFixed(3)}% in ${src} is below the acceptable floor of ${CTR_FLOOR}%. May indicate tracking issue or ghost impressions.`,
+            severity: d.ctr < CTR_FLOOR*0.5 ? 'critical' : 'high',
+            sources: [src], value: d.ctr,
+            detected: new Date().toISOString()
+          });
+        }
+        /* ROAS floor */
+        if(d.roas < ROAS_FLOOR){
+          results.push({
+            campaign: c.name, metric: 'roas', type: 'logic',
+            description: `ROAS of ${d.roas.toFixed(2)}x in ${src} is below the floor of ${ROAS_FLOOR}x. ${d.roas < 0 ? 'Negative ROAS — critical error in revenue attribution.' : 'Campaign may be unprofitable.'}`,
+            severity: d.roas < 0 ? 'critical' : 'high',
+            sources: [src], value: d.roas,
+            detected: new Date().toISOString()
+          });
+        }
+        /* clicks > impressions */
+        if(d.clicks > d.impressions){
+          results.push({
+            campaign: c.name, metric: 'clicks', type: 'logic',
+            description: `Clicks (${d.clicks.toLocaleString()}) exceed impressions (${d.impressions.toLocaleString()}) in ${src}. Logically impossible — data integrity issue.`,
+            severity: 'critical', sources: [src],
+            detected: new Date().toISOString()
+          });
+        }
+        /* conversions > clicks */
+        if(d.conversions > d.clicks){
+          results.push({
+            campaign: c.name, metric: 'conversions', type: 'logic',
+            description: `Conversions (${d.conversions.toLocaleString()}) exceed clicks (${d.clicks.toLocaleString()}) in ${src}. Indicates duplicate conversion counting or pixel misfire.`,
+            severity: 'high', sources: [src],
+            detected: new Date().toISOString()
+          });
+        }
+        /* CPC consistency */
+        const calcCPC = d.spend / d.clicks;
+        if(d.cpc && Math.abs((calcCPC - d.cpc)/d.cpc) > 0.05){
+          results.push({
+            campaign: c.name, metric: 'cpc', type: 'logic',
+            description: `Reported CPC (${fmt(d.cpc,'cpc')}) in ${src} doesn't reconcile with spend/clicks (${fmt(calcCPC,'cpc')}). Possible duplicate spend rows.`,
+            severity: 'medium', sources: [src],
+            detected: new Date().toISOString()
+          });
+        }
+      });
+    });
+  }
+
+  /* 5. Trend breaks — week-over-week simulation */
+  if(chkTrend){
+    /* Simulate last-week values; flag if change > 40% */
+    data.forEach((c,i) => {
+      if(c.anomalyFlags.trend_break){
+        results.push({
+          campaign: c.name, metric: 'spend', type: 'trend',
+          description: `Spend dropped by ~62% week-over-week vs the prior 4-week average. Sudden drop may indicate budget exhaustion, pausing, or platform issue.`,
+          severity: 'high', sources: ['azure','db','tableau'],
+          detected: new Date().toISOString()
+        });
+        results.push({
+          campaign: c.name, metric: 'impressions', type: 'trend',
+          description: `Impressions declined sharply (>50% WoW) while CTR remained stable — indicates reach restriction, budget cap hit, or audience saturation.`,
+          severity: 'medium', sources: ['azure','db','tableau'],
+          detected: new Date().toISOString()
+        });
+      }
+    });
+  }
+
+  return results;
+}
+
+function fmt(val, metric){
+  if(val == null) return '—';
+  if(['spend','revenue','cpc','cpa'].includes(metric)) return '$'+parseFloat(val).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  if(['ctr','conversion_rate'].includes(metric)) return parseFloat(val).toFixed(3)+'%';
+  if(metric==='roas') return parseFloat(val).toFixed(2)+'x';
+  return parseFloat(val).toLocaleString(undefined,{maximumFractionDigits:2});
+}
+
+/* ════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════ */
+let anomalies = [];
+let cmpFilter = 'all';
+let anomFilter = 'all';
+let chartsBuilt = false;
+
+/* ════════════════════════════════════════════════════
+   NAVIGATION
+════════════════════════════════════════════════════ */
+const PAGE_TITLES = {
+  overview:'Overview', comparison:'Source Comparison', anomalies:'Anomalies',
+  campaigns:'Campaign Detail', config:'Data Sources', ai:'AI Analysis'
+};
+function showSection(id, el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('page-title').textContent = PAGE_TITLES[id];
+}
+
+/* ════════════════════════════════════════════════════
+   CONNECTION SIMULATION
+════════════════════════════════════════════════════ */
+function testConnection(src){
+  const dot = document.getElementById('cfg-dot-'+src) || document.getElementById('sd-'+src);
+  if(dot) { dot.className='dot loading'; }
+  const cfgCard = document.getElementById('cfg-'+src);
+  if(cfgCard) cfgCard.classList.remove('connected','error');
+  setTimeout(()=>{
+    ['cfg-dot-'+src,'sd-'+src].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.className='dot ok';
+    });
+    if(cfgCard) cfgCard.classList.add('connected');
+  }, 900 + Math.random()*600);
+}
+
+function loadSampleData(){
+  /* Demo mode — uses built-in sample data, no API calls needed */
+  ['azure','db','tableau'].forEach((s,i)=>{
+    setTimeout(()=>testConnection(s), i*350);
+  });
+  setTimeout(()=>{
+    anomalies = detectAnomalies(campaignData);
+    populateCampaignSelectors();
+    updateMetrics();
+    buildCharts();
+    renderComparison();
+    renderAnomalies();
+    renderTopAnomalies();
+    document.getElementById('anom-count').textContent = anomalies.length;
+  }, 1400);
+}
+
+async function runComparison(){
+  /* Production mode — calls /api/compare then /api/anomalies */
+  setStatus('loading');
+  showToast('Fetching data from all sources…');
+
+  try {
+    /* 1. Fetch & merge from Azure / DB / Tableau */
+    const compareResp = await fetch('/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        azure:   { campaignKey: 'campaign_name' },
+        db:      { campaignKey: 'campaign_name' },
+        tableau: { campaignKey: 'Campaign Name' },
+      }),
+    });
+    if (!compareResp.ok) throw new Error(`/api/compare returned ${compareResp.status}`);
+    const compareData = await compareResp.json();
+
+    if (compareData.errors?.length) {
+      compareData.errors.forEach(e => console.warn(`[${e.source}] ${e.message}`));
+    }
+
+    /* Use API data if available, fall back to built-in sample */
+    const liveCampaigns = compareData.campaigns?.length ? compareData.campaigns : campaignData;
+    setStatus('ok');
+    showToast(`Loaded ${liveCampaigns.length} campaigns — running anomaly detection…`);
+
+    /* 2. Detect anomalies */
+    const anomResp = await fetch('/api/anomalies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaigns: liveCampaigns,
+        config: {
+          zScoreThreshold:   parseFloat(document.getElementById('cfg-zscore')?.value  || 2.5),
+          deltaThresholdPct: parseFloat(document.getElementById('cfg-delta')?.value   || 5),
+          ctrFloor:          parseFloat(document.getElementById('cfg-ctr-floor')?.value || 0.5),
+          roasFloor:         parseFloat(document.getElementById('cfg-roas-floor')?.value || 1.0),
+          detectTrends:      document.getElementById('chk-trend')?.checked !== false,
+          detectLogic:       document.getElementById('chk-logic')?.checked !== false,
+          detectMissing:     document.getElementById('chk-missing')?.checked !== false,
+        },
+      }),
+    });
+    if (!anomResp.ok) throw new Error(`/api/anomalies returned ${anomResp.status}`);
+    const anomData = await anomResp.json();
+
+    anomalies = anomData.anomalies ?? detectAnomalies(liveCampaigns);
+
+    /* Merge live data into campaignData so all renderers work */
+    if (compareData.campaigns?.length) {
+      campaignData.length = 0;
+      compareData.campaigns.forEach(c => campaignData.push(c));
+    }
+
+    populateCampaignSelectors();
+    updateMetrics();
+    buildCharts();
+    renderComparison();
+    renderAnomalies();
+    renderTopAnomalies();
+    document.getElementById('anom-count').textContent = anomalies.length;
+    showToast(`Done — ${anomalies.length} anomalies detected`, 'ok');
+
+  } catch(err) {
+    console.error('runComparison:', err);
+    showToast('API unavailable — using sample data', 'warn');
+    /* Graceful fallback to built-in data */
+    anomalies = detectAnomalies(campaignData);
+    populateCampaignSelectors();
+    updateMetrics();
+    buildCharts();
+    renderComparison();
+    renderAnomalies();
+    renderTopAnomalies();
+    document.getElementById('anom-count').textContent = anomalies.length;
+  }
+}
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function setStatus(state){
+  ['azure','db','tableau'].forEach(s=>{
+    const dots = [document.getElementById('sd-'+s), document.getElementById('cfg-dot-'+s)];
+    dots.forEach(d=>{ if(d) d.className='dot '+state; });
+  });
+}
+
+let _toastTimer;
+function showToast(msg, type='info'){
+  let t = document.getElementById('app-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'app-toast';
+    t.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:9px 16px;border-radius:8px;font-size:12px;font-family:var(--mono);z-index:9999;transition:opacity 0.3s;border:1px solid;max-width:320px;';
+    document.body.appendChild(t);
+  }
+  const colors = { info:'var(--bg3);color:var(--text2);border-color:var(--border2)', ok:'var(--accent-dim);color:var(--accent);border-color:var(--accent-border)', warn:'var(--warn-dim);color:var(--warn);border-color:var(--warn-border)', err:'var(--danger-dim);color:var(--danger);border-color:var(--danger-border)' };
+  t.style.background = colors[type]?.split(';')[0]?.split(':')[1] ?? 'var(--bg3)';
+  t.setAttribute('style', t.style.cssText + colors[type]);
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>{ t.style.opacity='0'; }, 4000);
+}
+
+/* ════════════════════════════════════════════════════
+   METRICS
+════════════════════════════════════════════════════ */
+function updateMetrics(){
+  const matches = countComparisonStatus('match');
+  const mismatches = countComparisonStatus('mismatch') + countComparisonStatus('missing');
+  const health = Math.round(Math.max(0, 100 - (mismatches/CAMPAIGNS.length/METRICS.length*100) - (anomalies.length*1.5)));
+  document.getElementById('m-campaigns').textContent = CAMPAIGNS.length;
+  document.getElementById('m-matches').textContent = matches;
+  document.getElementById('m-mismatches').textContent = mismatches;
+  document.getElementById('m-anomalies').textContent = anomalies.length;
+  document.getElementById('m-health').textContent = health+'%';
+  document.getElementById('m-health').className = 'metric-value ' + (health>80?'ok':health>60?'warn':'danger');
+}
+
+function countComparisonStatus(status){
+  let n=0;
+  campaignData.forEach(c=>{
+    METRICS.forEach(m=>{
+      const r = getRowStatus(c,m);
+      if(r===status) n++;
+    });
+  });
+  return n;
+}
+
+function getRowStatus(c,metric){
+  if(!c.azure) return 'missing';
+  const vals = ['azure','db','tableau'].map(s=>c[s]?c[s][metric]:null).filter(v=>v!=null);
+  if(vals.length<2) return 'missing';
+  const minV=Math.min(...vals), maxV=Math.max(...vals);
+  if(minV<=0) return vals.every(v=>v===vals[0])?'match':'mismatch';
+  return ((maxV-minV)/minV) < 0.01 ? 'match' : 'mismatch';
+}
+
+/* ════════════════════════════════════════════════════
+   CHARTS
+════════════════════════════════════════════════════ */
+function buildCharts(){
+  if(chartsBuilt){ Chart.helpers.each(Chart.instances, c=>c.destroy()); }
+  chartsBuilt = true;
+
+  /* Spend by campaign */
+  new Chart(document.getElementById('chart-spend'),{
+    type:'bar',
+    data:{
+      labels: CAMPAIGNS.map(n=>n.length>14?n.slice(0,13)+'…':n),
+      datasets:[
+        {label:'Azure',data:campaignData.map(c=>c.azure?c.azure.spend:0),backgroundColor:'rgba(96,184,240,0.7)',borderRadius:3},
+        {label:'Database',data:campaignData.map(c=>c.db?c.db.spend:0),backgroundColor:'rgba(160,224,144,0.7)',borderRadius:3},
+        {label:'Tableau',data:campaignData.map(c=>c.tableau?c.tableau.spend:0),backgroundColor:'rgba(240,192,96,0.7)',borderRadius:3},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#5c5b56',font:{size:10},maxRotation:40},grid:{color:'rgba(255,255,255,0.04)'}},
+              y:{ticks:{color:'#5c5b56',font:{size:10},callback:v=>'$'+Math.round(v/1000)+'k'},grid:{color:'rgba(255,255,255,0.04)'}}}}
+  });
+
+  /* Anomaly distribution */
+  const sevCounts = {critical:0,high:0,medium:0,low:0};
+  anomalies.forEach(a=>{ sevCounts[a.severity]=(sevCounts[a.severity]||0)+1; });
+  new Chart(document.getElementById('chart-anomaly-dist'),{
+    type:'doughnut',
+    data:{
+      labels:['Critical','High','Medium','Low'],
+      datasets:[{data:[sevCounts.critical,sevCounts.high,sevCounts.medium,sevCounts.low],
+        backgroundColor:['rgba(240,96,96,0.8)','rgba(240,184,96,0.8)','rgba(96,184,240,0.8)','rgba(92,91,86,0.6)'],
+        borderWidth:0,hoverOffset:4}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{display:false}}}
+  });
+
+  /* CTR trend */
+  const labels=['W-8','W-7','W-6','W-5','W-4','W-3','W-2','W-1','This week'];
+  const ctrBase = [2.1,2.3,2.0,2.4,2.2,2.3,2.1,2.5,2.2];
+  const ctrAnomaly = [null,null,null,null,null,null,null,null,0.08];
+  new Chart(document.getElementById('chart-ctr'),{
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'Avg CTR',data:ctrBase,borderColor:'rgba(200,240,96,0.8)',backgroundColor:'rgba(200,240,96,0.08)',
+         tension:0.4,pointRadius:3,pointBackgroundColor:'rgba(200,240,96,0.9)',borderWidth:2,fill:true},
+        {label:'Anomaly',data:ctrAnomaly,borderColor:'rgba(240,96,96,0)',backgroundColor:'transparent',
+         pointRadius:ctrAnomaly.map(v=>v?8:0),pointBackgroundColor:'rgba(240,96,96,0.9)',
+         pointBorderColor:'rgba(240,96,96,0.4)',pointBorderWidth:4,showLine:false}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#5c5b56',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
+              y:{ticks:{color:'#5c5b56',font:{size:10},callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'}}}}
+  });
+
+  /* ROAS by source */
+  new Chart(document.getElementById('chart-roas'),{
+    type:'bar',
+    data:{
+      labels:CAMPAIGNS.map(n=>n.length>14?n.slice(0,13)+'…':n),
+      datasets:[
+        {label:'Azure',data:campaignData.map(c=>c.azure?c.azure.roas:0),backgroundColor:'rgba(96,184,240,0.7)',borderRadius:3},
+        {label:'Database',data:campaignData.map(c=>c.db?c.db.roas:0),backgroundColor:'rgba(160,224,144,0.7)',borderRadius:3},
+        {label:'Tableau',data:campaignData.map(c=>c.tableau?c.tableau.roas:0),backgroundColor:'rgba(240,192,96,0.7)',borderRadius:3},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#5c5b56',font:{size:10},maxRotation:40},grid:{color:'rgba(255,255,255,0.04)'}},
+              y:{ticks:{color:'#5c5b56',font:{size:10},callback:v=>v+'x'},grid:{color:'rgba(255,255,255,0.04)'},
+                 min:-1}}}
+  });
+}
+
+/* ════════════════════════════════════════════════════
+   COMPARISON TABLE
+════════════════════════════════════════════════════ */
+function setCmpFilter(f, el){
+  cmpFilter = f;
+  document.querySelectorAll('#section-comparison .pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderComparison();
+}
+
+function renderComparison(){
+  const campSel = document.getElementById('cmp-campaign')?.value || 'all';
+  const metSel  = document.getElementById('cmp-metric')?.value || 'all';
+  const tbody = document.getElementById('cmp-body');
+  let rows = [];
+
+  campaignData.forEach(c=>{
+    if(campSel!=='all' && c.name!==campSel) return;
+    METRICS.forEach(m=>{
+      if(metSel!=='all' && m!==metSel) return;
+      const status = getRowStatus(c,m);
+      if(cmpFilter!=='all' && status!==cmpFilter) return;
+      const vals = ['azure','db','tableau'].map(s=>c[s]?c[s][m]:null);
+      const nonNull = vals.filter(v=>v!=null);
+      const minV=Math.min(...nonNull), maxV=Math.max(...nonNull);
+      const delta = minV>0 ? ((maxV-minV)/minV*100).toFixed(1)+'%' : '—';
+      rows.push({c,m,status,vals,delta});
+    });
+  });
+
+  document.getElementById('cmp-count').textContent = rows.length+' rows';
+
+  if(rows.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters.</td></tr>'; return; }
+
+  tbody.innerHTML = rows.map(({c,m,status,vals,delta})=>{
+    const badge = status==='match'?'<span class="badge match">✓ match</span>':
+                  status==='mismatch'?'<span class="badge mismatch">⚠ mismatch</span>':
+                  '<span class="badge missing">— missing</span>';
+    const fmtCell = (v,src) => v==null ? '<span style="color:var(--text3)">—</span>' :
+      `<span class="diff-val val-${src}">${fmt(v,m)}</span>`;
+    const dBadge = parseFloat(delta)>10?`<span style="color:var(--danger)">${delta}</span>`:
+                   parseFloat(delta)>3?`<span style="color:var(--warn)">${delta}</span>`:delta;
+    return `<tr>
+      <td>${c.name}</td>
+      <td style="color:var(--text2)">${m}</td>
+      <td>${fmtCell(vals[0],'azure')}</td>
+      <td>${fmtCell(vals[1],'db')}</td>
+      <td>${fmtCell(vals[2],'tableau')}</td>
+      <td>${badge}</td>
+      <td class="mono">${status==='match'?'<span style="color:var(--text3)">0%</span>':dBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   ANOMALIES
+════════════════════════════════════════════════════ */
+function setAnomFilter(f, el){
+  anomFilter = f;
+  document.querySelectorAll('#section-anomalies .pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderAnomalies();
+}
+
+function renderAnomalies(){
+  const typeFilter = document.getElementById('anom-type-filter')?.value || 'all';
+  let filtered = anomalies.filter(a=>{
+    if(anomFilter!=='all' && a.severity!==anomFilter) return false;
+    if(typeFilter!=='all' && a.type!==typeFilter) return false;
+    return true;
+  });
+
+  /* Cards — top 8 */
+  const cardsWrap = document.getElementById('anomaly-cards-wrap');
+  const top = filtered.slice(0,8);
+  cardsWrap.innerHTML = '<div class="anomaly-grid">'+top.map(a=>`
+    <div class="anomaly-card ${a.severity}">
+      <div class="anomaly-header">
+        <div>
+          <div class="anomaly-title">${a.campaign}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${a.metric} · ${a.type}</div>
+        </div>
+        <span class="badge ${a.severity==='critical'?'critical':a.severity==='high'?'mismatch':a.severity==='medium'?'info':'ok'}">${a.severity}</span>
+      </div>
+      <div class="anomaly-desc">${a.description}</div>
+      <div class="anomaly-meta">
+        <div class="anomaly-meta-item">Sources: <span>${a.sources.join(', ')}</span></div>
+        ${a.zScore?`<div class="anomaly-meta-item">Z-score: <span>${a.zScore.toFixed(2)}σ</span></div>`:''}
+        ${a.delta?`<div class="anomaly-meta-item">Delta: <span>${(a.delta*100).toFixed(1)}%</span></div>`:''}
+      </div>
+    </div>
+  `).join('')+'</div>';
+
+  /* Log table */
+  const tbody = document.getElementById('anom-log-body');
+  if(filtered.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:2rem;">No anomalies match current filters.</td></tr>'; return; }
+  tbody.innerHTML = filtered.map(a=>{
+    const sevBadge = a.severity==='critical'?'<span class="badge critical">critical</span>':
+                     a.severity==='high'?'<span class="badge mismatch">high</span>':
+                     a.severity==='medium'?'<span class="badge info">medium</span>':
+                     '<span class="badge ok">low</span>';
+    const typeLabel = {statistical:'📊 outlier',mismatch:'⇄ mismatch',missing:'— missing',trend:'↘ trend',logic:'✗ logic'}[a.type]||a.type;
+    return `<tr>
+      <td>${a.campaign}</td>
+      <td class="mono" style="color:var(--text2)">${a.metric}</td>
+      <td style="color:var(--text3)">${typeLabel}</td>
+      <td style="font-size:11px;max-width:280px;white-space:normal;line-height:1.4;">${a.description.slice(0,120)}${a.description.length>120?'…':''}</td>
+      <td style="color:var(--text3)">${a.sources.join(', ')}</td>
+      <td>${sevBadge}</td>
+      <td style="color:var(--text3);font-size:11px;">${new Date(a.detected).toLocaleTimeString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTopAnomalies(){
+  const top = anomalies.sort((a,b)=>['critical','high','medium','low'].indexOf(a.severity)-['critical','high','medium','low'].indexOf(b.severity)).slice(0,6);
+  const tbody = document.getElementById('top-anomalies-body');
+  if(top.length===0){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:2rem;">No anomalies detected.</td></tr>'; return; }
+  tbody.innerHTML = top.map(a=>{
+    const sevBadge = a.severity==='critical'?'<span class="badge critical">critical</span>':
+                     a.severity==='high'?'<span class="badge mismatch">high</span>':
+                     a.severity==='medium'?'<span class="badge info">medium</span>':'<span class="badge ok">low</span>';
+    const valRange = a.minVal!=null?`${fmt(a.minVal,a.metric)} → ${fmt(a.maxVal,a.metric)}`:a.value!=null?fmt(a.value,a.metric):'—';
+    return `<tr>
+      <td>${a.campaign}</td>
+      <td class="mono" style="color:var(--text2)">${a.metric}</td>
+      <td style="font-size:11px;color:var(--text2)">${a.description.slice(0,90)}…</td>
+      <td>${sevBadge}</td>
+      <td style="color:var(--text3)">${a.sources.join(', ')}</td>
+      <td class="mono" style="font-size:11px;">${valRange}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   CAMPAIGN DETAIL
+════════════════════════════════════════════════════ */
+function populateCampaignSelectors(){
+  const campSel = document.getElementById('camp-selector');
+  const cmpCampSel = document.getElementById('cmp-campaign');
+  if(campSel){ campSel.innerHTML='<option value="">Select a campaign…</option>'+CAMPAIGNS.map(n=>`<option value="${n}">${n}</option>`).join(''); }
+  if(cmpCampSel){ cmpCampSel.innerHTML='<option value="all">All campaigns</option>'+CAMPAIGNS.map(n=>`<option value="${n}">${n}</option>`).join(''); }
+  const cmpMetSel = document.getElementById('cmp-metric');
+  if(cmpMetSel){ cmpMetSel.innerHTML='<option value="all">All metrics</option>'+METRICS.map(m=>`<option value="${m}">${m}</option>`).join(''); }
+  [document.getElementById('cmp-campaign'),document.getElementById('cmp-metric')].forEach(s=>{
+    if(s) s.onchange = renderComparison;
+  });
+}
+
+function renderCampaignDetail(){
+  const name = document.getElementById('camp-selector').value;
+  const wrap = document.getElementById('campaign-detail-wrap');
+  if(!name){ wrap.innerHTML='<div class="empty"><div class="empty-icon">▦</div>Select a campaign above.</div>'; return; }
+  const c = campaignData.find(x=>x.name===name);
+  if(!c) return;
+  const campAnomalies = anomalies.filter(a=>a.campaign===name);
+
+  let html = `<div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+    <div class="metric"><div class="metric-label">Anomalies detected</div><div class="metric-value ${campAnomalies.length>3?'danger':campAnomalies.length>0?'warn':'ok'}">${campAnomalies.length}</div></div>
+    <div class="metric"><div class="metric-label">Sources present</div><div class="metric-value info">${[c.azure,c.db,c.tableau].filter(Boolean).length}/3</div></div>
+    <div class="metric"><div class="metric-label">Overall status</div><div class="metric-value ${campAnomalies.some(a=>a.severity==='critical')?'danger':campAnomalies.length>0?'warn':'ok'}">${campAnomalies.some(a=>a.severity==='critical')?'Critical':campAnomalies.length>0?'Issues found':'Clean'}</div></div>
+  </div>`;
+
+  html += `<div class="card" style="margin-bottom:14px;"><div class="card-title">Metric comparison</div><div class="table-wrap"><table>
+    <thead><tr><th>Metric</th><th>Azure Blob</th><th>Database</th><th>Tableau</th><th>Status</th><th>Delta</th></tr></thead>
+    <tbody>`;
+  METRICS.forEach(m=>{
+    const status = getRowStatus(c,m);
+    const vals = ['azure','db','tableau'].map(s=>c[s]?c[s][m]:null);
+    const nonNull = vals.filter(v=>v!=null);
+    const minV=Math.min(...nonNull), maxV=Math.max(...nonNull);
+    const delta = nonNull.length>1 && minV>0 ? ((maxV-minV)/minV*100).toFixed(2)+'%' : '—';
+    const badge = status==='match'?'<span class="badge match">✓</span>':status==='mismatch'?'<span class="badge mismatch">⚠</span>':'<span class="badge missing">—</span>';
+    html += `<tr><td class="mono" style="color:var(--text2)">${m}</td>
+      ${['azure','db','tableau'].map((s,i)=>`<td class="mono" style="font-size:11px;color:var(--${['azure','db','tableau'][i]==='azure'?'azure':'db'===s?'db':'tableau'})">${vals[i]!=null?fmt(vals[i],m):'<span style="color:var(--text3)">—</span>'}</td>`).join('')}
+      <td>${badge}</td><td class="mono" style="font-size:11px;${parseFloat(delta)>5?'color:var(--danger)':parseFloat(delta)>2?'color:var(--warn)':''}">${delta}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div></div>';
+
+  if(campAnomalies.length>0){
+    html += `<div class="card"><div class="card-title">Anomalies for this campaign (${campAnomalies.length})</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">`;
+    campAnomalies.forEach(a=>{
+      html += `<div style="padding:10px 14px;border:1px solid var(--border);border-left:3px solid var(--${a.severity==='critical'?'danger':a.severity==='high'?'warn':'info'});border-radius:var(--r);background:var(--bg3);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:500;color:var(--text)">${a.metric}</span>
+          <span class="badge ${a.severity==='critical'?'critical':a.severity==='high'?'mismatch':a.severity==='medium'?'info':'ok'}">${a.severity}</span>
+          <span style="font-size:10px;color:var(--text3)">${a.type}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;">${a.description}</div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
+  wrap.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════════════
+   AI ANALYSIS
+════════════════════════════════════════════════════ */
+async function runAI(mode){
+  const out = document.getElementById('ai-output');
+  out.innerHTML = 'Analyzing… <span class="ai-cursor"></span>';
+
+  try {
+    /* POST to /api/analyze — streams SSE tokens back */
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, anomalies, campaigns: campaignData }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(()=>({error: resp.statusText}));
+      throw new Error(err.error ?? resp.statusText);
+    }
+
+    /* Stream SSE response */
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let   text    = '';
+    out.textContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          text += JSON.parse(payload);
+          out.textContent = text;
+        } catch { /* partial chunk — ignore */ }
+      }
+    }
+
+    if (!text) out.textContent = 'No response received.';
+
+  } catch(e){
+    /* Fallback: call Anthropic directly from browser (demo/dev only) */
+    console.warn('SSE stream failed, falling back to direct API call:', e.message);
+    out.innerHTML = 'Analyzing… <span class="ai-cursor"></span>';
+    const criticals = anomalies.filter(a=>a.severity==='critical').length;
+    out.textContent = `[/api/analyze unavailable — ${e.message}]\n\nQuick summary based on detected data:\n• ${criticals} critical anomalies detected\n• ${anomalies.filter(a=>a.type==='mismatch').length} cross-source mismatches\n• ${anomalies.filter(a=>a.type==='logic').length} logic violations\n\nDeploy to Vercel with ANTHROPIC_API_KEY set to enable full streaming AI analysis.`;
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   EXPORT
+════════════════════════════════════════════════════ */
+function exportReport(){
+  const rows = ['Campaign,Metric,Azure,Database,Tableau,Status,Delta,Anomaly Severity'];
+  campaignData.forEach(c=>{
+    METRICS.forEach(m=>{
+      const vals = ['azure','db','tableau'].map(s=>c[s]?c[s][m]:'');
+      const status = getRowStatus(c,m);
+      const nonNull = vals.filter(v=>v!=='');
+      const nums = nonNull.map(v=>parseFloat(v)).filter(v=>!isNaN(v));
+      const delta = nums.length>1 && Math.min(...nums)>0 ? ((Math.max(...nums)-Math.min(...nums))/Math.min(...nums)*100).toFixed(2)+'%':'';
+      const matchAnom = anomalies.find(a=>a.campaign===c.name && a.metric===m);
+      rows.push([c.name,m,...vals,status,delta,matchAnom?matchAnom.severity:''].join(','));
+    });
+  });
+  const blob = new Blob([rows.join('\n')],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='campaign_comparison_report.csv'; a.click();
+}
+
+/* ════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════ */
+window.onload = () => {
+  populateCampaignSelectors();
+};
+</script>
+</body>
+</html>

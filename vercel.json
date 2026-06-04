@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)",     "dest": "/public/$1" }
+  ],
+  "env": {
+    "AZURE_STORAGE_CONNECTION_STRING": "@azure-storage-connection-string",
+    "DB_HOST":                         "@db-host",
+    "DB_NAME":                         "@db-name",
+    "DB_USER":                         "@db-user",
+    "DB_PASSWORD":                     "@db-password",
+    "DB_DIALECT":                      "@db-dialect",
+    "TABLEAU_SERVER_URL":              "@tableau-server-url",
+    "TABLEAU_SITE_NAME":               "@tableau-site-name",
+    "TABLEAU_TOKEN_NAME":              "@tableau-token-name",
+    "TABLEAU_TOKEN_SECRET":            "@tableau-token-secret",
+    "ANTHROPIC_API_KEY":               "@anthropic-api-key"
+  }
+}
